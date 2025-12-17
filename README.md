@@ -85,3 +85,6 @@ To balance speed and safety, you can adjust these key parameters:
 - ∟  90° Turns (L-Turn):  786
 - 🔄 180° Turns (U-Turn): 33
 - 📈 Efficiency Ratio:    0.94
+- Path Planning Result:
+
+![Coverage Result](./coverage_result.png)
