@@ -4,7 +4,7 @@ A high-performance Python pipeline for complete coverage path planning on comple
 
 ## 🌟 Key Features
 - Safety-First BCD: Enhanced decomposition logic that splits cells at critical obstacle boundaries to prevent collisions.
-- High Performance: Optimized to run maps up to 200x200 in ~5 seconds.
+- High Performance: Optimized to run maps up to 200x200 in ~8 seconds.
 - Rectilinear Movement: Robot prioritizes 90-degree L-turns for professional, "human-like" cleaning patterns.
 - Adaptive Snake Path: Automatically chooses horizontal or vertical zigzagging based on cell geometry.
 
