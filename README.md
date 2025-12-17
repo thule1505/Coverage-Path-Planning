@@ -30,7 +30,7 @@ The pipeline is organized into modular stages as defined in the following files:
     - Implements L-Turn logic for structured movement.
 
 ### 5. Orchestration
-```CoveragePipeline.py```: The master script that links all submodules. It handles the data flow from raw image input to the final master path and generates runtime metrics.
+- `CoveragePipeline.py`: The master script that links all submodules. It handles the data flow from raw image input to the final master path and generates runtime metrics.
 
 ## ⚙️ Computational Pipeline
 
@@ -78,13 +78,33 @@ To balance speed and safety, you can adjust these key parameters:
 - Visual Aesthetics (`CoveragePipeline.py`): The visualization uses high-contrast circular badges and slate-gray paths for clarity.
 
 ## 📊 Performance Metrics
-- 📍 Coverage Rate:      100.00%
-- 🚀 Total Steps:         29661 steps
-- 🧹 Cleaning Steps:      27859
-- 🔗 Transition Steps:    1802
-- ∟  90° Turns (L-Turn):  786
-- 🔄 180° Turns (U-Turn): 33
-- 📈 Efficiency Ratio:    0.94
-- Path Planning Result:
+- Runtime Report
+```text
+           SYSTEM RUNTIME PROFILE            
+─────────────────────────────────────────────
+🔹 Step 1: Preprocessing        :  1.4633s ( 17.5%)
+🔹 Step 2: BCD Decomposition    :  0.0409s (  0.5%)
+🔹 StStep 3: Node Generation    :  0.3197s (  3.8%)
+🔹 Step 4: Graph Building       :  0.5030s (  6.0%)
+🔹 Step 5: Distance Matrix      :  0.0297s (  0.4%)
+🔹 Step 6: ACO Pathfinding      :  5.8882s ( 70.4%)
+🔹 Step 7: Trajectory Planning  :  0.1204s (  1.4%)
+─────────────────────────────────────────────
+🚀 TOTAL PIPELINE RUNTIME      :  8.3652s
+═════════════════════════════════════════════
+```
+- Perfomance Report
+```text
+📊 FINAL PERFORMANCE REPORT
+═════════════════════════════════════════════
+📍 Coverage Rate:      100.00%
+🚀 Total Steps:         29567 steps
+🧹 Cleaning Steps:      27859
+🔗 Transition Steps:    1708
+∟  90° Turns (L-Turn):  753
+🔄 180° Turns (U-Turn): 33
+📈 Efficiency Ratio:    0.94
+═════════════════════════════════════════════
+```
 
 ![Coverage Result](./coverage_result.png)
