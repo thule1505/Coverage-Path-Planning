@@ -49,28 +49,6 @@ def astar(grid, start, goal):
                     heapq.heappush(open_set, (new_cost + h(v), new_cost, v))
     return np.inf, None
 
-def find_valid(p, grid):
-    """
-    Nếu điểm p (r, c) nằm trên vật cản (grid == 1), 
-    tìm pixel trống (grid == 0) gần nhất trong phạm vi 3x3 hoặc 5x5.
-    """
-    r, c = int(p[0]), int(p[1])
-    H, W = grid.shape
-    
-    # Nếu đã là vùng trống thì trả về luôn
-    if grid[r, c] == 0:
-        return (r, c)
-    
-    # Quét rộng dần ra xung quanh (bán kính 1, rồi 2)
-    for radius in range(1, 3):
-        for dr in range(-radius, radius + 1):
-            for dc in range(-radius, radius + 1):
-                nr, nc = r + dr, c + dc
-                if 0 <= nr < H and 0 <= nc < W and grid[nr, nc] == 0:
-                    return (nr, nc)
-    
-    return (r, c) # Trả về gốc nếu không tìm thấy (trường hợp cực hiếm)
-    
 def build_reduced_graph(grid, processed_cells, k_neighbors=4):
     K = len(processed_cells)
     is_dict = isinstance(processed_cells, dict) or (isinstance(processed_cells, list) and K > 0 and isinstance(processed_cells[0], dict))
@@ -131,20 +109,46 @@ def build_distance_matrix(G, K, grid, processed_cells):
     D = np.zeros((K, K))
     centroids = [processed_cells[i]['centroid'] for i in range(K)]
     
+    # Pre-calculate boundary sets để so sánh nhanh
+    # Dùng set giúp kiểm tra láng giềng cực nhanh
+    cell_coords_sets = [set(map(tuple, processed_cells[i]['coordinates'])) for i in range(K)]
+
     for i in range(K):
         dist_row = dijkstra_from(G, i, K)
         for j in range(K):
+            if i == j: continue
+            
+            # Tính cost cơ bản dựa trên Centroid (Giữ nguyên ý bạn)
             if dist_row[j] == np.inf:
-                # --- LỚP PHÒNG THỦ 3: CỨU CÁNH CUỐI CÙNG ---
-                # Nếu Dijkstra trong G thất bại, chạy A* trực tiếp trên Grid
                 cost, _ = astar(grid, centroids[i], centroids[j])
-                
                 if cost != np.inf:
                     dist_row[j] = cost
                 else:
-                    # Nếu A* vẫn thua (do tường kín), dùng Euclidean để tránh 99999
                     p1, p2 = centroids[i], centroids[j]
                     dist_row[j] = np.sqrt((p1[0]-p2[0])**2 + (p1[1]-p2[1])**2) * 5.0
-                    
+            
+            # --- CẢI TIẾN GIẢM UNPRODUCTIVE ---
+            # Kiểm tra xem Cell i và Cell j có phải láng giềng sát sườn không
+            # Nếu có điểm chung hoặc cách nhau chỉ 1-2 pixel, ta giảm chi phí xuống
+            # Điều này ép ACO chọn các Cell kề nhau, giảm việc chạy xuyên map
+            
+            is_neighbor = False
+            # Lấy mẫu một vài điểm biên của Cell i để check nhanh thay vì check toàn bộ
+            sample_coords = processed_cells[i]['coordinates'][::10] 
+            for r, c in sample_coords:
+                # Kiểm tra 4 ô xung quanh điểm biên
+                for dr in [-1, 0, 1]:
+                    for dc in [-1, 0, 1]:
+                        if (r + dr, c + dc) in cell_coords_sets[j]:
+                            is_neighbor = True
+                            break
+                    if is_neighbor: break
+                if is_neighbor: break
+            
+            if is_neighbor:
+                # Giảm 40% chi phí nếu là láng giềng trực tiếp
+                # Robot sẽ ưu tiên dọn dẹp các cell "vách ngăn" này trước
+                dist_row[j] *= 0.6 
+
         D[i] = dist_row
     return D

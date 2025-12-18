@@ -75,7 +75,7 @@ class CoveragePipeline:
         start=time.time()
         print("[Step 3] Extracting Node Information...")
         self.processed_cells = node_generation(self.cells, self.grid)
-        self.runtimes['StStep 3: Node Generation'] = time.time() - start
+        self.runtimes['Step 3: Node Generation'] = time.time() - start
         return self.processed_cells
 
     # --- STAGE 2: SEQUENCE OPTIMIZATION (SPLITTED) ---
@@ -107,8 +107,19 @@ class CoveragePipeline:
                          for d in self.processed_cells.values()]
         start_node = np.argmin(dist_to_start)
 
-        solver = MMAS(self.dist_matrix, num_ants=ants, num_iterations=iters, closed_tour=False)
-        self.best_sequence, _ = solver.run(start_node=start_node)
+        solver = MMAS(
+            self.dist_matrix, 
+            num_ants=ants, 
+            num_iterations=iters, 
+            beta=4.0, 
+            closed_tour=False
+        )
+        
+        self.best_sequence, self.best_cost = solver.run(
+            start_node=start_node, 
+            verbose=True, 
+            early_stopping=20
+        )
         self.runtimes['Step 6: ACO Pathfinding'] = time.time() - start
         return self.best_sequence
 
@@ -180,16 +191,47 @@ class CoveragePipeline:
     def _show_report(self):
         self._show_runtime_report()
 
+        m = self.metrics
+        coverage = m['coverage_rate']
+        total = m['total_steps']
+        clean = m['clean_area_steps']
+        trans = m['transition_steps']
+        t90 = m['turns_90']
+        t180 = m['turns_180']
+        efficiency = clean / total if total > 0 else 0.0
+
+        print("\n" + "=" * 52)
         print("📊 FINAL PERFORMANCE REPORT")
-        print("═"*45)
-        print(f"📍 Coverage Rate:      {self.metrics['coverage_rate']:.2f}%")
-        print(f"🚀 Total Steps:         {self.metrics['total_steps']} steps")
-        print(f"🧹 Cleaning Steps:      {self.metrics['clean_area_steps']}")
-        print(f"🔗 Transition Steps:    {self.metrics['transition_steps']}")
-        print(f"∟  90° Turns (L-Turn):  {self.metrics['turns_90']}")
-        print(f"🔄 180° Turns (U-Turn): {self.metrics['turns_180']}")
-        print(f"📈 Efficiency Ratio:    {self.metrics['clean_area_steps']/self.metrics['total_steps']:.2f}")
-        print("═"*45)
+        print("=" * 52)
+
+        def row(label, value):
+            print(f"{label:<32} {value}")
+
+        # Core metrics
+        row("📍 Coverage Rate", f"{coverage:.2f} %")
+        row("🚀 Total Steps", f"{total} steps")
+        row("🧹 Cleaning Steps", f"{clean} pts")
+        row("🔗 Transition Steps", f"{trans} pts")
+
+        print("-" * 52)
+
+        # Turning
+        row("↪️  90° Turns (L-turn)", t90)
+        row("🔄 180° Turns (U-turn)", t180)
+
+        print("-" * 52)
+
+        # Efficiency
+        bar_len = 20
+        filled = int(efficiency * bar_len)
+        bar = "█" * filled + "░" * (bar_len - filled)
+
+        row("📈 Efficiency Ratio", f"{efficiency:.2f}")
+        print(f"    Progress: [{bar}] {efficiency:.1%}")
+
+        print("=" * 52 + "\n")
+
+
 
     def print_mission_report(self):
         """
@@ -238,14 +280,12 @@ class CoveragePipeline:
         print(f"📊 [TOTAL METRICS]")
         print(f" - Total Cells to Clean    : {total_cells}")
         print(f" - Unproductive Travel     : {total_deadheading:.1f} pixels (Lower is better)")
-        print(f" - Algorithm Efficiency    : {self.runtimes.get('ACO', 0):.2f}s (ACO Runtime)")
+        print(f" - Algorithm Efficiency    : {self.runtimes.get('Step 6: ACO Pathfinding', 0):.2f}s (ACO Runtime)")
         print("="*87 + "\n")
-
-
 
     def visualize(self):
         print("--- Stage 4: Visualizing Result ---")
-        plt.figure(figsize=(12, 12))
+        plt.figure(figsize=(25, 25))
 
         # 1. Hiển thị Map và Cells
         plt.imshow(self.grid, cmap='binary', origin='upper')
@@ -253,6 +293,7 @@ class CoveragePipeline:
 
         # 2. Vẽ Charging Station
         plt.scatter(self.charging_station[1], self.charging_station[0], marker='p',
+        
                     color='gold', s=300, edgecolors='black', linewidth=2, label='Charging Station', zorder=10)
         plt.text(self.charging_station[1], self.charging_station[0] - 2, "HOME / CHARGER",
                  color='darkgoldenrod', weight='bold', ha='center', fontsize=10, zorder=10)
@@ -371,47 +412,6 @@ class CoveragePipeline:
         plt.savefig("coverage_result.png", dpi=300, bbox_inches='tight')
         plt.show()
 
-def debug_pathfinding(pipeline, step_from, step_to):
-        cid_prev = pipeline.best_sequence[step_from - 1]
-        cid_curr = pipeline.best_sequence[step_to - 1]
-
-        start = pipeline.processed_cells[cid_prev]['centroid']
-        goal = pipeline.processed_cells[cid_curr]['centroid']
-
-        print(f"--- Debugging Step {step_from} to {step_to} ---")
-        print(f"From Cell {cid_prev} {start} to Cell {cid_curr} {goal}")
-
-        # Kiểm tra 8 pixel xung quanh Start và Goal xem có bị dính tường không
-        def check_neighbors(p, name):
-            r, c = int(p[0]), int(p[1])
-            region = pipeline.grid[r-1:r+2, c-1:c+2]
-            if np.any(region == 1):
-                print(f"⚠️ Cảnh báo: {name} đang nằm rất sát hoặc chạm vào vật cản!")
-                print(region)
-
-        check_neighbors(start, "Start")
-        check_neighbors(goal, "Goal")
-
-        # Vẽ phóng to khu vực giữa 2 Cell này
-        r_min = int(min(start[0], goal[0]) - 20)
-        r_max = int(max(start[0], goal[0]) + 20)
-        c_min = int(min(start[1], goal[1]) - 20)
-        c_max = int(max(start[1], goal[1]) + 20)
-
-        # Đảm bảo index không vượt quá giới hạn grid
-        r_min, r_max = max(0, r_min), min(pipeline.grid.shape[0], r_max)
-        c_min, c_max = max(0, c_min), min(pipeline.grid.shape[1], c_max)
-
-        plt.figure(figsize=(10, 10))
-        crop = pipeline.grid[r_min:r_max, c_min:c_max]
-        plt.imshow(crop, cmap='gray_r', extent=[c_min, c_max, r_max, r_min])
-        plt.scatter([start[1]], [start[0]], color='blue', s=100, label='Start')
-        plt.scatter([goal[1]], [goal[0]], color='red', s=100, label='Goal')
-        plt.grid(True, which='both', color='gray', linewidth=0.5)
-        plt.title(f"Zoom-in: Cell {cid_prev} to {cid_curr}")
-        plt.legend()
-        plt.show()
-
 if __name__ == "__main__":
     # 1. Cấu hình tham số
     IMAGE_PATH = "test_1.jpg"  # File ảnh Sofa bạn đã gửi
@@ -425,16 +425,11 @@ if __name__ == "__main__":
 
     # Chạy tuần tự các bước
     pipeline.process_input_cad(IMAGE_PATH, grid_size=GRID_SIZE,fill_closed_regions=False)
-    start = (122, 145) # Tọa độ Cell 26 từ hình bạn gửi
-    goal = (167, 32)   # Tọa độ Cell 47 từ hình bạn gửi
-
-    # Thử chạy A* trên grid gốc
-    path = astar(pipeline.grid, start, goal)
     pipeline.run_cell_decomposition()
     pipeline.run_node_generation()
     pipeline.build_graph()
     pipeline.build_distance_matrix()
-    pipeline.run_aco(ants=10, iters=50) # Tăng ants/iters theo map 200x200
+    pipeline.run_aco(ants=20, iters=80) # Tăng ants/iters theo map 200x200
     pipeline.generate_final_path()
 
     # In báo cáo chi tiết
@@ -442,3 +437,7 @@ if __name__ == "__main__":
     pipeline.print_mission_report()
     # Hiển thị kết quả
     pipeline.visualize()
+
+    # Hiển thị kết quả cuối cùng
+    plt.show()
+  

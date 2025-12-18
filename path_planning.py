@@ -3,6 +3,33 @@ import heapq
 from reduced_graph import astar, reconstruct_path
 
 # --- 1. CORE LOGIC: RECTILINEAR PATH (L-TURN) ---
+def get_continuous_segments(items):
+    """Chia một hàng/cột tọa độ thành các đoạn liên tục để tránh đi xuyên vật cản."""
+    if not items: return []
+    items = sorted(items)
+    segments = []
+    current_segment = [items[0]]
+    for i in range(1, len(items)):
+        if items[i] == items[i-1] + 1:
+            current_segment.append(items[i])
+        else:
+            segments.append(current_segment)
+            current_segment = [items[i]]
+    segments.append(current_segment)
+    return segments
+
+def validate_point(p, grid, radius=5):
+    """Dịch chuyển điểm p ra khỏi vật cản nếu nó lỡ nằm trên pixel đen."""
+    r, c = int(p[0]), int(p[1])
+    if grid[r, c] == 0: return (r, c)
+    H, W = grid.shape
+    for d in range(1, radius + 1):
+        for dr in range(-d, d + 1):
+            for dc in range(-d, d + 1):
+                nr, nc = r + dr, c + dc
+                if 0 <= nr < H and 0 <= nc < W and grid[nr, nc] == 0:
+                    return (nr, nc)
+    return p
 
 def find_rectilinear_path(start, end, safe_coords):
     """
@@ -76,7 +103,7 @@ def generate_horizontal_snake(coords, current_pos):
 
     return path, internal_turns
 
-def generate_vertical_snake(coords, current_pos):
+def generate_vertical_snake(coords, current_pos, occupancy_grid):
     """Quét dọc với logic Snake Path và L-Turn chuyển cột."""
     col_dict = {}
     for r, c in coords:
@@ -94,25 +121,69 @@ def generate_vertical_snake(coords, current_pos):
 
     for c in sorted_cols:
         rows_in_col = sorted(col_dict[c], reverse=reverse)
-        p_entry = (rows_in_col[0], c)
+        segments = []
+        if rows_in_col:
+            # Tách đoạn dựa trên tính liên tục của hàng (r)
+            # Vì đã sorted nên nếu r sau cách r trước > 1 nghĩa là có vật cản ở giữa
+            curr_seg = [rows_in_col[0]]
+            for i in range(1, len(rows_in_col)):
+                if abs(rows_in_col[i] - rows_in_col[i-1]) == 1:
+                    curr_seg.append(rows_in_col[i])
+                else:
+                    segments.append(curr_seg)
+                    curr_seg = [rows_in_col[i]]
+            segments.append(curr_seg)
+        
+        for seg in segments:
+            p_entry = (seg[0], c)
 
-        if path:
-            p_prev_exit = path[-1]
-            if p_prev_exit[1] != c: # Chuyển cột
-                rect_path = find_rectilinear_path(p_prev_exit, p_entry, safe_coords)
-                if rect_path:
-                    internal_turns.append(rect_path[0])
-                    for p in rect_path:
-                        if p != path[-1]: path.append(p)
+            if path:
+                p_prev_exit = path[-1]
+                # Kiểm tra nếu phải "nhảy" (do đổi cột hoặc do vật cản cắt ngang cột)
+                if p_prev_exit[1] != c or abs(p_prev_exit[0] - p_entry[0]) > 1:
+                    # Dùng A* để lách qua vật cản đen an toàn nhất
+                    from reduced_graph import astar
+                    _, transition = astar(occupancy_grid, p_prev_exit, p_entry)
+                    
+                    if transition:
+                        for p in transition:
+                            if p != path[-1]: path.append(p)
+                    else:
+                        # Nếu A* lỗi, dùng logic L-turn mặc định của bạn
+                        rect_path = find_rectilinear_path(p_prev_exit, p_entry, safe_coords)
+                        if rect_path:
+                            internal_turns.append(rect_path[0])
+                            for p in rect_path:
+                                if p != path[-1]: path.append(p)
 
-        for r in rows_in_col:
-            p_curr = (r, c)
-            if not path or p_curr != path[-1]: path.append(p_curr)
+            # Thêm các điểm trong đoạn vào path
+            for r in seg:
+                p_curr = (r, c)
+                if not path or p_curr != path[-1]: 
+                    path.append(p_curr)
+
+        # Đổi hướng quét cho cột tiếp theo
         reverse = not reverse
+        # rows_in_col = sorted(col_dict[c], reverse=reverse)
+        # p_entry = (rows_in_col[0], c)
+
+        # if path:
+        #     p_prev_exit = path[-1]
+        #     if p_prev_exit[1] != c: # Chuyển cột
+        #         rect_path = find_rectilinear_path(p_prev_exit, p_entry, safe_coords)
+        #         if rect_path:
+        #             internal_turns.append(rect_path[0])
+        #             for p in rect_path:
+        #                 if p != path[-1]: path.append(p)
+
+        # for r in rows_in_col:
+        #     p_curr = (r, c)
+        #     if not path or p_curr != path[-1]: path.append(p_curr)
+        # reverse = not reverse
 
     return path, internal_turns
 
-def generate_zigzag_in_cell(cell_data, current_pos):
+def generate_zigzag_in_cell(cell_data, current_pos, occupancy_grid):
     """Tự động chọn hướng quét ưu tiên theo chiều dài cell."""
     coords = cell_data['coordinates']
     if not coords: return [], []
@@ -120,8 +191,8 @@ def generate_zigzag_in_cell(cell_data, current_pos):
     height, width = max(rows) - min(rows) + 1, max(cols) - min(cols) + 1
 
     return generate_horizontal_snake(coords, current_pos) if width >= height \
-           else generate_vertical_snake(coords, current_pos)
-
+           else generate_vertical_snake(coords, current_pos, occupancy_grid)
+    
 # --- 3. MASTER PLANNER ---
 def full_coverage_planner(processed_cells, best_sequence, occupancy_grid, charging_station):
     """Hợp nhất lộ trình toàn cục, tối ưu chuyển tiếp giữa các Cell bằng A*."""
@@ -133,12 +204,13 @@ def full_coverage_planner(processed_cells, best_sequence, occupancy_grid, chargi
 
     for cid in best_sequence:
         cell_data = processed_cells[cid]
-        cell_zigzag, internal_turns = generate_zigzag_in_cell(cell_data, current_pos)
+        cell_zigzag, internal_turns = generate_zigzag_in_cell(cell_data, current_pos, occupancy_grid)
 
         if not cell_zigzag: continue
 
         # --- Transition: A* logic ---
         entry_point = tuple(map(int, cell_zigzag[0]))
+        entry_point = validate_point(entry_point, occupancy_grid)
         _, transition_path = astar(occupancy_grid, current_pos, entry_point)
 
         if transition_path:
