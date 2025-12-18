@@ -1,3 +1,4 @@
+%matplotlib inline
 import numpy as np
 import matplotlib.pyplot as plt
 import importlib
@@ -414,7 +415,7 @@ class CoveragePipeline:
 
 if __name__ == "__main__":
     # 1. Cấu hình tham số
-    IMAGE_PATH = "test_1.jpg"  # File ảnh Sofa bạn đã gửi
+    IMAGE_PATH = "test_3.png"  # File ảnh Sofa bạn đã gửi
     GRID_SIZE = (200, 200)           # Kích thước lưới (nên từ 300-500 cho bản đồ này)
     CHARGING_STATION = (5, 30)      # Tọa độ trạm sạc (y, x)
 
