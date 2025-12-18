@@ -140,9 +140,13 @@ def generate_vertical_snake(coords, current_pos, occupancy_grid):
             if path:
                 p_prev_exit = path[-1]
                 # Kiểm tra nếu phải "nhảy" (do đổi cột hoặc do vật cản cắt ngang cột)
+                dist = np.sqrt((p_prev_exit[0]-p_entry[0])**2 + (p_prev_exit[1]-p_entry[1])**2)
+                if dist > 50:
+                    continue
+
                 if p_prev_exit[1] != c or abs(p_prev_exit[0] - p_entry[0]) > 1:
                     # Dùng A* để lách qua vật cản đen an toàn nhất
-                    from reduced_graph import astar
+                    
                     _, transition = astar(occupancy_grid, p_prev_exit, p_entry)
                     
                     if transition:
@@ -199,6 +203,7 @@ def full_coverage_planner(processed_cells, best_sequence, occupancy_grid, chargi
     master_path, detailed_segments = [], []
     current_pos = tuple(map(int, charging_station))
 
+    H, W = occupancy_grid.shape  # Lấy kích thước ảnh
     # Grid an toàn cho Transition L-Turn
     safe_grid_coords = set(zip(*np.where(occupancy_grid == 0)))
 
@@ -239,7 +244,39 @@ def full_coverage_planner(processed_cells, best_sequence, occupancy_grid, chargi
             'exit': cell_zigzag[-1],
             'turns': internal_turns
         })
-        master_path.extend(cell_zigzag)
+        if len(cell_zigzag) > 0:
+            # Đảm bảo điểm đầu tiên của zigzag khớp với điểm cuối của transition trước đó
+            if master_path and cell_zigzag[0] != master_path[-1]:
+                # Nếu có khoảng hở, ép dùng A* để nối thay vì kẻ đường thẳng
+                _, bridge = astar(occupancy_grid, master_path[-1], cell_zigzag[0])
+                if bridge: master_path.extend(bridge)
+            
+            master_path.extend(cell_zigzag)
+
+            cell_coords = set(cell_data['coordinates'])
+            boundary_pts = []
+            for r, c in cell_coords:
+                # Nếu có láng giềng là tường (1) hoặc thuộc Cell khác, thì đó là điểm biên
+                is_edge = False
+                for dr, dc in [(0,1),(0,-1),(1,0),(-1,0)]:
+                    nr, nc = r+dr, c+dc
+                    if 0 <= nr < H and 0 <= nc < W:
+                        if occupancy_grid[nr, nc] == 1 or (nr, nc) not in cell_coords:
+                            is_edge = True
+                            break
+                    else:
+                        # Nếu ngoài biên ảnh, coi như chạm biên (is_edge = True)
+                        is_edge = True
+                        break
+                    
+                if is_edge: boundary_pts.append((r, c))
+            
+            # Sắp xếp boundary_pts để robot chạy quanh biên (đơn giản hóa bằng TSP hoặc sắp xếp tọa độ)
+            if boundary_pts:
+                # Nối tiếp từ điểm cuối zigzag để chạy thêm 1 vòng quanh tường
+                # Điều này sẽ dọn sạch nốt các pixel màu xanh nhạt bạn thấy
+                master_path.extend(boundary_pts[::2]) # Lấy mẫu để tránh quá dày
+
         current_pos = tuple(map(int, cell_zigzag[-1]))
 
     return master_path, detailed_segments, current_pos
