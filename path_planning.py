@@ -11,7 +11,7 @@ def find_rectilinear_path(start, end, safe_coords):
     """
     r_start, c_start = int(start[0]), int(start[1])
     r_end, c_end = int(end[0]), int(end[1])
-    
+
     if (r_start, c_start) == (r_end, c_end): return []
 
     def is_line_clear(p1, p2):
@@ -30,12 +30,12 @@ def find_rectilinear_path(start, end, safe_coords):
     p_turn_v = (r_end, c_start)
     if is_line_clear((r_start, c_start), p_turn_v) and is_line_clear(p_turn_v, (r_end, c_end)):
         return [p_turn_v, (r_end, c_end)]
-    
+
     # 2: NGANG TRƯỚC (H), DỌC SAU (V)
     p_turn_h = (r_start, c_end)
     if is_line_clear((r_start, c_start), p_turn_h) and is_line_clear(p_turn_h, (r_end, c_end)):
         return [p_turn_h, (r_end, c_end)]
-        
+
     return [(r_end, c_end)]
 
 # --- 2. SNAKE PATH GENERATORS ---
@@ -45,12 +45,12 @@ def generate_horizontal_snake(coords, current_pos):
     for r, c in coords:
         if r not in row_dict: row_dict[r] = []
         row_dict[r].append(c)
-    
+
     sorted_rows = sorted(row_dict.keys())
     # Chọn hướng bắt đầu gần robot nhất
     if abs(current_pos[0] - sorted_rows[-1]) < abs(current_pos[0] - sorted_rows[0]):
         sorted_rows = sorted_rows[::-1]
-        
+
     path, internal_turns = [], []
     first_row_cols = sorted(row_dict[sorted_rows[0]])
     reverse = abs(current_pos[1] - first_row_cols[-1]) < abs(current_pos[1] - first_row_cols[0])
@@ -59,7 +59,7 @@ def generate_horizontal_snake(coords, current_pos):
     for r in sorted_rows:
         cols_in_row = sorted(row_dict[r], reverse=reverse)
         p_entry = (r, cols_in_row[0])
-        
+
         if path:
             p_prev_exit = path[-1]
             if p_prev_exit[0] != r: # Chuyển hàng
@@ -73,7 +73,7 @@ def generate_horizontal_snake(coords, current_pos):
             p_curr = (r, c)
             if not path or p_curr != path[-1]: path.append(p_curr)
         reverse = not reverse
-        
+
     return path, internal_turns
 
 def generate_vertical_snake(coords, current_pos):
@@ -82,11 +82,11 @@ def generate_vertical_snake(coords, current_pos):
     for r, c in coords:
         if c not in col_dict: col_dict[c] = []
         col_dict[c].append(r)
-    
+
     sorted_cols = sorted(col_dict.keys())
     if abs(current_pos[1] - sorted_cols[-1]) < abs(current_pos[1] - sorted_cols[0]):
         sorted_cols = sorted_cols[::-1]
-    
+
     path, internal_turns = [], []
     first_col_rows = sorted(col_dict[sorted_cols[0]])
     reverse = abs(current_pos[0] - first_col_rows[-1]) < abs(current_pos[0] - first_col_rows[0])
@@ -95,7 +95,7 @@ def generate_vertical_snake(coords, current_pos):
     for c in sorted_cols:
         rows_in_col = sorted(col_dict[c], reverse=reverse)
         p_entry = (rows_in_col[0], c)
-        
+
         if path:
             p_prev_exit = path[-1]
             if p_prev_exit[1] != c: # Chuyển cột
@@ -109,7 +109,7 @@ def generate_vertical_snake(coords, current_pos):
             p_curr = (r, c)
             if not path or p_curr != path[-1]: path.append(p_curr)
         reverse = not reverse
-        
+
     return path, internal_turns
 
 def generate_zigzag_in_cell(cell_data, current_pos):
@@ -118,7 +118,7 @@ def generate_zigzag_in_cell(cell_data, current_pos):
     if not coords: return [], []
     rows, cols = [p[0] for p in coords], [p[1] for p in coords]
     height, width = max(rows) - min(rows) + 1, max(cols) - min(cols) + 1
-    
+
     return generate_horizontal_snake(coords, current_pos) if width >= height \
            else generate_vertical_snake(coords, current_pos)
 
@@ -127,14 +127,14 @@ def full_coverage_planner(processed_cells, best_sequence, occupancy_grid, chargi
     """Hợp nhất lộ trình toàn cục, tối ưu chuyển tiếp giữa các Cell bằng A*."""
     master_path, detailed_segments = [], []
     current_pos = tuple(map(int, charging_station))
-    
+
     # Grid an toàn cho Transition L-Turn
     safe_grid_coords = set(zip(*np.where(occupancy_grid == 0)))
 
     for cid in best_sequence:
         cell_data = processed_cells[cid]
         cell_zigzag, internal_turns = generate_zigzag_in_cell(cell_data, current_pos)
-        
+
         if not cell_zigzag: continue
 
         # --- Transition: A* logic ---
@@ -147,10 +147,10 @@ def full_coverage_planner(processed_cells, best_sequence, occupancy_grid, chargi
             # (Thường A* đã khá tối ưu, nhưng ta chèn thêm find_rectilinear_path để đồng bộ 90 độ)
             p_start_astar = tuple(map(int, transition_path[0]))
             rect_trans = find_rectilinear_path(current_pos, p_start_astar, safe_grid_coords)
-            
+
             full_trans = [current_pos] + rect_trans + list(transition_path[1:])
             if rect_trans: transition_turns.append(rect_trans[0])
-            
+
             detailed_segments.append({
                 'type': 'transition',
                 'points': full_trans,
@@ -169,5 +169,5 @@ def full_coverage_planner(processed_cells, best_sequence, occupancy_grid, chargi
         })
         master_path.extend(cell_zigzag)
         current_pos = tuple(map(int, cell_zigzag[-1]))
-        
+
     return master_path, detailed_segments, current_pos

@@ -63,27 +63,29 @@ def preprocess_classical(img):
     # 1. Threshold:
     # CAD images have white background (255), black lines (0). Watermarks are gray (~230-240).
     # We use THRESH_BINARY_INV.
-    _, binary = cv2.threshold(img, 200, 255, cv2.THRESH_BINARY_INV)
+
+    img = cv2.GaussianBlur(img, (5, 5), 0)
+    _, binary = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY_INV)
 
     # 2. Noise removal
-    num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
-        binary, connectivity=8
-    )
-    min_size = 50
-    binary_clean = np.zeros_like(binary)
-    for i in range(1, num_labels):
-        if stats[i, cv2.CC_STAT_AREA] >= min_size:
-            binary_clean[labels == i] = 255
+    # num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(
+    #     binary, connectivity=8
+    # )
+    # min_size = 50
+    # binary_clean = np.zeros_like(binary)
+    # for i in range(1, num_labels):
+    #     if stats[i, cv2.CC_STAT_AREA] >= min_size:
+    #         binary_clean[labels == i] = 255
 
-    # 3. IMPORTANT: Thicken lines (Dilate)
-    # Since 4000px image is reduced to 400px (10x), lines need to be at least 10px thick in original
-    # to remain visible after downscaling.
-    kernel_dilate = np.ones((5, 5), np.uint8)
-    # Dilate twice to make lines truly thick
-    dilated = cv2.dilate(binary_clean, kernel_dilate, iterations=2)
+    kernel = np.ones((3,3), np.uint8)
+    binary = cv2.morphologyEx(binary, cv2.MORPH_OPEN, kernel, iterations=1)
 
-    return dilated  # Return 0-255 image
+    # # 3. IMPORTANT: Thicken lines (Dilate)
+    # kernel_dilate = np.ones((5, 5), np.uint8)
+    # # Dilate twice to make lines truly thick
+    # dilated = cv2.dilate(binary, kernel_dilate, iterations=2)
 
+    return binary  # Return 0-255 image
 
 def raster_to_grid(occ_mask_255, grid_size=(400, 400)):
     """
