@@ -2,6 +2,25 @@ import heapq
 import numpy as np
 from sklearn.neighbors import KDTree
 
+def find_valid(p, grid):
+    """
+    Hàm phụ giúp dịch chuyển điểm ra khỏi tường nếu lỡ dính 1 pixel đen.
+    Đưa ra ngoài để build_reduced_graph có thể gọi được.
+    """
+    H, W = grid.shape
+    r_idx, c_idx = int(p[0]), int(p[1])
+    
+    # Nếu điểm hiện tại đã là đường trống (0), trả về luôn
+    if grid[r_idx, c_idx] == 0:
+        return (r_idx, c_idx)
+    
+    # Nếu kẹt tường (1), tìm trong bán kính 2px điểm trống gần nhất
+    for r in range(r_idx - 2, r_idx + 3):
+        for c in range(c_idx - 2, c_idx + 3):
+            if 0 <= r < H and 0 <= c < W and grid[r, c] == 0:
+                return (r, c)
+    return (r_idx, c_idx)
+
 def reconstruct_path(came_map, start, goal):
     path = []
     current = goal
