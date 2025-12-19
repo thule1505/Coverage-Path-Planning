@@ -123,5 +123,30 @@ def boustrophedon_decomposition(occupancy):
                     final_cells[cell_id_map[nr, nc]].append((r, c))
                     found = True; break
             if found: break
+            
+    if final_cells:
+        # 1. Tìm xem cụm nào là cụm lớn nhất (Sàn nhà chính)
+        main_cell_idx = np.argmax([len(c) for c in final_cells])
+        main_pixel = final_cells[main_cell_idx][0] # Lấy 1 điểm làm mốc
 
+        # 2. Dùng BFS để tìm tất cả các pixel "thông" với điểm mốc này
+        reachable_pixels = set()
+        q = [main_pixel]
+        reachable_pixels.add(main_pixel)
+        
+        # Tạo set chứa toàn bộ pixel trắng để tra cứu nhanh
+        all_white_pixels = set().union(*[set(c) for c in final_cells])
+        
+        idx = 0
+        while idx < len(q):
+            curr = q[idx]; idx += 1
+            for dr, dc in [(0,1),(0,-1),(1,0),(-1,0),(1,1),(1,-1),(-1,1),(-1,-1)]:
+                neighbor = (curr[0] + dr, curr[1] + dc)
+                if neighbor in all_white_pixels and neighbor not in reachable_pixels:
+                    reachable_pixels.add(neighbor)
+                    q.append(neighbor)
+        
+        # 3. CHỐT HẠ: Chỉ giữ lại các Cell nào có pixel thuộc vùng reachable này
+        # Những Cell nằm trong vùng bị bao quanh bởi pixel đen sẽ bị gạch tên ở đây
+        final_cells = [c for c in final_cells if c[0] in reachable_pixels]
     return final_cells, cell_id_map

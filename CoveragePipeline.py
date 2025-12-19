@@ -136,7 +136,7 @@ class CoveragePipeline:
         self._calculate_metrics()
 
     def _calculate_metrics(self):
-        """Tính toán chi tiết các chỉ số Performance."""
+        """Tính toán chi tiết các chỉ số Performance nâng cao."""
         all_pts = []
         clean_steps = 0
         trans_steps = 0
@@ -149,32 +149,58 @@ class CoveragePipeline:
             else:
                 trans_steps += len(pts)
 
-        # 1. Steps
+        # 1. Cơ bản
         self.metrics['total_steps'] = len(all_pts)
         self.metrics['clean_area_steps'] = clean_steps
         self.metrics['transition_steps'] = trans_steps
 
-        # 2. Coverage
+        # 2. Coverage & Overlap
         free_space_total = np.sum(self.grid == 0)
-        visited_unique = len(set([tuple(map(int, p)) for p in all_pts]))
-        self.metrics['coverage_rate'] = (visited_unique / free_space_total) * 100
+        visited_unique_set = set([tuple(map(int, p)) for p in all_pts])
+        visited_unique_count = len(visited_unique_set)
+        
+        self.metrics['coverage_rate'] = (visited_unique_count / free_space_total) * 100
+        
+        # Công thức Overlap: (Tổng bước - Bước duy nhất) / Bước duy nhất
+        if visited_unique_count > 0:
+            overlap = ((len(all_pts) - visited_unique_count) / visited_unique_count) * 100
+            self.metrics['overlap_rate'] = overlap
+        else:
+            self.metrics['overlap_rate'] = 0
 
         # 3. Turns (90 and 180)
         t90, t180 = 0, 0
         for i in range(1, len(all_pts) - 1):
             v1 = np.array(all_pts[i]) - np.array(all_pts[i-1])
             v2 = np.array(all_pts[i+1]) - np.array(all_pts[i])
-
             n1, n2 = np.linalg.norm(v1), np.linalg.norm(v2)
             if n1 > 0 and n2 > 0:
                 cos_theta = np.dot(v1, v2) / (n1 * n2)
                 angle = np.degrees(np.arccos(np.clip(cos_theta, -1.0, 1.0)))
-
                 if 80 <= angle <= 100: t90 += 1
                 elif angle > 170: t180 += 1
 
         self.metrics['turns_90'] = t90
         self.metrics['turns_180'] = t180
+        
+        # 4. Angular Momentum (Tổng góc quay lũy kế)
+        self.metrics['total_heading_change'] = (t90 * 90) + (t180 * 180)
+
+        # 5. Energy Index (Dựa trên trọng số ma sát và cơ cấu truyền động)
+        # Đi thẳng: 1.0, Quay 90: 2.5, Quay 180: 4.0
+        self.metrics['energy_index'] = (len(all_pts) * 1.0) + (t90 * 2.5) + (t180 * 4.0)
+
+        # 6. Connectivity Success
+        # Vì ta đã lọc vùng cô lập trong Decomposition, tỷ lệ này sẽ là 100% nếu robot hoàn thành chuỗi
+        self.metrics['connectivity_success'] = 100.0 if len(self.best_sequence) > 0 else 0.0
+
+        #Tính độ mượt (càng thấp càng mượt)
+        smoothness_index = self.metrics['total_heading_change'] / self.metrics['total_steps']
+        self.metrics['smoothness_index'] = smoothness_index
+
+        # Tính mật độ rẽ
+        turn_density = (t90 + t180) / self.metrics['total_steps']
+        self.metrics['turn_density'] = turn_density
 
     def _show_runtime_report(self):
         total_time = sum(self.runtimes.values())
@@ -191,48 +217,61 @@ class CoveragePipeline:
 
     def _show_report(self):
         self._show_runtime_report()
-
         m = self.metrics
-        coverage = m['coverage_rate']
-        total = m['total_steps']
-        clean = m['clean_area_steps']
-        trans = m['transition_steps']
-        t90 = m['turns_90']
-        t180 = m['turns_180']
-        efficiency = clean / total if total > 0 else 0.0
+        
+        print("\n" + "=" * 60)
+        print(f"{'📊 ADVANCED PERFORMANCE REPORT':^60}")
+        print("=" * 60)
 
-        print("\n" + "=" * 52)
-        print("📊 FINAL PERFORMANCE REPORT")
-        print("=" * 52)
+        def row(icon, label, value, unit=""):
+            # Tách biểu tượng (icon) ra khỏi label để căn lề chữ chính xác hơn
+            # Căn lề nhãn 32 ký tự, giá trị căn phải 10 ký tự
+            print(f" {icon} {label:<32} | {value:>10} {unit}")
 
-        def row(label, value):
-            print(f"{label:<32} {value}")
+        si = m['smoothness_index']
+        
+        # Đánh giá độ mượt theo thang đo kỹ thuật
+        if si < 12: 
+            status = "Excellent"
+        elif si < 20: 
+            status = "Good"
+        else: 
+            status = "Fair"
 
-        # Core metrics
-        row("📍 Coverage Rate", f"{coverage:.2f} %")
-        row("🚀 Total Steps", f"{total} steps")
-        row("🧹 Cleaning Steps", f"{clean} pts")
-        row("🔗 Transition Steps", f"{trans} pts")
+        print("\n" + "=" * 65)
+        print(f"{'📊 ADVANCED PERFORMANCE REPORT':^65}")
+        print("=" * 65)
 
-        print("-" * 52)
+        # Nhóm 1: Coverage & Path
+        row("📍", "Coverage Rate", f"{m['coverage_rate']:.2f}", "%")
+        row("♻️", "Overlap Rate", f"{m['overlap_rate']:.2f}", "%")
+        row("🚀", "Total Steps", m['total_steps'], "steps")
+        row("🧹", "Cleaning Steps", m['clean_area_steps'], "steps")
+        row("🔗", "Transition Steps", m['transition_steps'], "steps")
+        
+        print("-" * 65)
+        
+        # Nhóm Smoothness (Căn chỉnh thủ công để khớp với hàm row)
+        print(f" 🧩 {'Path Smoothness Index':<32} | {si:>10.2f} °/step")
+        print(f" 📈 {'Smoothness Quality':<32} | {status:>10}")
+        print(f" 📍 {'Turn Density':<32} | {m['turn_density']:>10.3f} turns/step")
+        
+        print("-" * 65)
 
-        # Turning
-        row("↪️  90° Turns (L-turn)", t90)
-        row("🔄 180° Turns (U-turn)", t180)
+        # Nhóm 2: Maneuverability
+        row("↪️", "90° Turns (L-turn)", m['turns_90'])
+        row("🔄", "180° Turns (U-turn)", m['turns_180'])
+        row("📐", "Total Heading Change", m['total_heading_change'], "degrees")
+        
+        print("-" * 65)
 
-        print("-" * 52)
+        # Nhóm 3: Efficiency & Energy
+        efficiency = m['clean_area_steps'] / m['total_steps'] if m['total_steps'] > 0 else 0
+        row("📊", "Efficiency Ratio", f"{efficiency:.3f}")
+        row("⚡", "Estimated Energy Index", f"{m['energy_index']:.1f}", "units")
+        row("✅", "Connectivity Success", f"{m['connectivity_success']:.1f}", "%")
 
-        # Efficiency
-        bar_len = 20
-        filled = int(efficiency * bar_len)
-        bar = "█" * filled + "░" * (bar_len - filled)
-
-        row("📈 Efficiency Ratio", f"{efficiency:.2f}")
-        print(f"    Progress: [{bar}] {efficiency:.1%}")
-
-        print("=" * 52 + "\n")
-
-
+        print("=" * 65 + "\n")
 
     def print_mission_report(self):
         """
@@ -415,7 +454,7 @@ class CoveragePipeline:
 
 if __name__ == "__main__":
     # 1. Cấu hình tham số
-    IMAGE_PATH = "test_3.png"  # File ảnh Sofa bạn đã gửi
+    IMAGE_PATH = "test_3.jpg"  # File ảnh Sofa bạn đã gửi
     GRID_SIZE = (200, 200)           # Kích thước lưới (nên từ 300-500 cho bản đồ này)
     CHARGING_STATION = (5, 30)      # Tọa độ trạm sạc (y, x)
 
