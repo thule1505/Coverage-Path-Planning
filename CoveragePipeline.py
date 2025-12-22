@@ -218,10 +218,6 @@ class CoveragePipeline:
     def _show_report(self):
         self._show_runtime_report()
         m = self.metrics
-        
-        print("\n" + "=" * 60)
-        print(f"{'📊 ADVANCED PERFORMANCE REPORT':^60}")
-        print("=" * 60)
 
         def row(icon, label, value, unit=""):
             # Tách biểu tượng (icon) ra khỏi label để căn lề chữ chính xác hơn
@@ -325,18 +321,21 @@ class CoveragePipeline:
 
     def visualize(self):
         print("--- Stage 4: Visualizing Result ---")
-        plt.figure(figsize=(25, 25))
+        plt.figure(figsize=(12, 12))
 
         # 1. Hiển thị Map và Cells
         plt.imshow(self.grid, cmap='binary', origin='upper')
         plt.imshow(self.cell_map, cmap='Set3', alpha=0.3, origin='upper')
 
-        # 2. Vẽ Charging Station
-        plt.scatter(self.charging_station[1], self.charging_station[0], marker='p',
-        
-                    color='gold', s=300, edgecolors='black', linewidth=2, label='Charging Station', zorder=10)
-        plt.text(self.charging_station[1], self.charging_station[0] - 2, "HOME / CHARGER",
-                 color='darkgoldenrod', weight='bold', ha='center', fontsize=10, zorder=10)
+        # 2. Vẽ Charging Station (START)
+        plt.scatter(self.charging_station[1], self.charging_station[0], 
+            marker='p', color='#FFD700', s=500, edgecolors='black', linewidth=1.5, 
+            label='Start/Charging Station', zorder=15)
+        plt.scatter(self.charging_station[1], self.charging_station[0], 
+            s=800, alpha=0.3, color='gold', edgecolors='none', zorder=14)
+        plt.text(self.charging_station[1], self.charging_station[0] + 5, "START",
+            color='black', weight='bold', fontsize=9, ha='center', va='bottom',
+            bbox=dict(facecolor='white', alpha=0.7, edgecolor='none', pad=1), zorder=16)
 
         # 3. Vẽ lộ trình chi tiết
         for segment in self.detailed_path:
@@ -451,12 +450,17 @@ class CoveragePipeline:
         plt.grid(True, which='both', linestyle=':', alpha=0.3)
         plt.savefig("coverage_result.png", dpi=300, bbox_inches='tight')
         plt.show()
+        
+def create_test_grid():
+    grid = np.zeros((200, 200))
+    grid[70:130, 50:150] = 1  # Vật cản lớn ở giữa
+    return grid
 
 if __name__ == "__main__":
     # 1. Cấu hình tham số
-    IMAGE_PATH = "test_3.jpg"  # File ảnh Sofa bạn đã gửi
+    IMAGE_PATH = "Berlin_0_256.png"  # File ảnh Sofa bạn đã gửi
     GRID_SIZE = (200, 200)           # Kích thước lưới (nên từ 300-500 cho bản đồ này)
-    CHARGING_STATION = (5, 30)      # Tọa độ trạm sạc (y, x)
+    CHARGING_STATION = (198, 35)      # Tọa độ trạm sạc (y, x)
 
     pipeline = CoveragePipeline(charging_station=CHARGING_STATION)
 
